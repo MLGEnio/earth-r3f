@@ -24,7 +24,11 @@ export default function EarthSystem() {
         "/earth/day.jpg",
         "/earth/night.jpg",
         "/earth/specularClouds.jpg",
-    ]);
+    ], textures => {
+        textures[0].colorSpace = THREE.SRGBColorSpace
+        textures[1].colorSpace = THREE.SRGBColorSpace
+        textures[2].colorSpace = THREE.NoColorSpace
+    });
 
     // Match original color/anisotropy
     useEffect(() => {
