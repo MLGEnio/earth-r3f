@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { useThree, useFrame } from "@react-three/fiber";
-import { useMemo, useRef, useEffect } from "react";
-import { useTexture } from "@react-three/drei";
+import React, {useMemo, useRef, useEffect, useState} from "react";
+import {Html, useCursor, useTexture} from "@react-three/drei";
 
 import earthVertex from "../shaders/earth/vertex.glsl";
 import earthFragment from "../shaders/earth/fragment.glsl";
@@ -11,110 +11,65 @@ import atmosphereFragment from "../shaders/atmosphere/fragment.glsl";
 // Optional: swap to Leva if you want live GUI controls
 import { useControls } from "leva";
 
-export default function EarthSystem() {
-    const earthRef = useRef();
+export default function EarthSystem({ sunRef, earthGroupRef, onClick = () => {} }) {
     const earthMatRef = useRef();
     const atmMatRef = useRef();
-    const debugSunRef = useRef();
+    const earthRef = useRef();
 
-    const { gl } = useThree();
+    const [hovered, set] = useState()
+    useCursor(hovered, /*'pointer', 'auto', document.body*/)
 
-    // Textures (public/earth/...)
     const [day, night, specClouds] = useTexture([
         "/earth/day.jpg",
         "/earth/night.jpg",
         "/earth/specularClouds.jpg",
-    ], textures => {
-        textures[0].colorSpace = THREE.SRGBColorSpace
-        textures[1].colorSpace = THREE.SRGBColorSpace
-        textures[2].colorSpace = THREE.NoColorSpace
+    ], (textures) => {
+        textures[0].colorSpace = THREE.SRGBColorSpace;
+        textures[1].colorSpace = THREE.SRGBColorSpace;
+        textures[2].colorSpace = THREE.NoColorSpace;
     });
 
-    // Match original color/anisotropy
-    useEffect(() => {
-        [day, night].forEach((t) => (t.colorSpace = THREE.SRGBColorSpace));
-        [day, night, specClouds].forEach((t) => (t.anisotropy = 8));
-    }, [day, night, specClouds]);
+    // seed uniforms with something; we’ll update per-frame
+    const earthUniforms = useMemo(() => ({
+        uDayTexture: { value: day },
+        uNightTexture: { value: night },
+        uSpecularCloudsTexture: { value: specClouds },
+        uSunDirection: { value: new THREE.Vector3(1,0,0) },
+        uAtmosphereDayColor: { value: new THREE.Color('#00aaff') },
+        uAtmosphereTwilightColor: { value: new THREE.Color('#ff6600') },
+    }), [day, night, specClouds]);
 
-    // Parameters (could be controlled with Leva)
-    const { atmosphereDayColor, atmosphereTwilightColor, phi, theta } = useControls({
-      atmosphereDayColor: '#00aaff',
-      atmosphereTwilightColor: '#ff6600',
-      phi: { value: Math.PI * 0.5, min: 0, max: Math.PI },
-      theta: { value: 0.5, min: -Math.PI, max: Math.PI },
-    });
+    const atmosphereUniforms = useMemo(() => ({
+        uSunDirection: { value: new THREE.Vector3(1,0,0) },
+        uAtmosphereDayColor: { value: new THREE.Color('#00aaff') },
+        uAtmosphereTwilightColor: { value: new THREE.Color('#ff6600') },
+    }), []);
 
+    // reuse vectors to avoid GC
+    const _sunPos = useMemo(() => new THREE.Vector3(), []);
+    const _earthPos = useMemo(() => new THREE.Vector3(), []);
+    const _sunDir = useMemo(() => new THREE.Vector3(), []);
 
-    // Sun direction via spherical (matches original)
-    const sunSpherical = useMemo(() => new THREE.Spherical(1, Math.PI * 0.5, 0.5), []);
-
-// 🔗 tie Leva -> spherical
-    useEffect(() => {
-        sunSpherical.set(1, phi, theta);
-    }, [phi, theta, sunSpherical]);
-    const sunDirection = useMemo(() => new THREE.Vector3(), []);
-
-    // Earth uniforms
-    const earthUniforms = useMemo(
-        () => ({
-            uDayTexture: { value: day },
-            uNightTexture: { value: night },
-            uSpecularCloudsTexture: { value: specClouds },
-            uSunDirection: { value: sunDirection.clone() },
-            uAtmosphereDayColor: { value: new THREE.Color(atmosphereDayColor) },
-            uAtmosphereTwilightColor: { value: new THREE.Color(atmosphereTwilightColor) },
-        }),
-        [day, night, specClouds, sunDirection, atmosphereDayColor, atmosphereTwilightColor]
-    );
-
-    // Atmosphere uniforms
-    const atmosphereUniforms = useMemo(
-        () => ({
-            uSunDirection: { value: sunDirection.clone() },
-            uAtmosphereDayColor: { value: new THREE.Color(atmosphereDayColor) },
-            uAtmosphereTwilightColor: { value: new THREE.Color(atmosphereTwilightColor) },
-        }),
-        [sunDirection, atmosphereDayColor, atmosphereTwilightColor]
-    );
-
-    // Update loop (rotation + sun dir + debug sphere)
     useFrame((_, dt) => {
-        // Rotate earth
-        if (earthRef.current) {
-            earthRef.current.rotation.y += dt * 0.1;
-        }
+        // self-rotation
+        if (earthRef.current) earthRef.current.rotation.y += dt * 0.1;
 
-        // Update sun direction & push to uniforms
-        sunDirection.setFromSpherical(sunSpherical);
+        // light direction = (Sun - Earth).normalized
+        if (sunRef?.current && earthGroupRef?.current) {
+            sunRef.current.getWorldPosition(_sunPos);
+            earthGroupRef.current.getWorldPosition(_earthPos);
+            _sunDir.subVectors(_sunPos, _earthPos).normalize();
 
-        if (earthMatRef.current) {
-            earthMatRef.current.uniforms.uSunDirection.value.copy(sunDirection);
-        }
-        if (atmMatRef.current) {
-            atmMatRef.current.uniforms.uSunDirection.value.copy(sunDirection);
-        }
-
-        if (debugSunRef.current) {
-            debugSunRef.current.position.copy(sunDirection).multiplyScalar(5);
+            if (earthMatRef.current)
+                earthMatRef.current.uniforms.uSunDirection.value.copy(_sunDir);
+            if (atmMatRef.current)
+                atmMatRef.current.uniforms.uSunDirection.value.copy(_sunDir);
         }
     });
-
-    // If you later want GUI color changes:
-    useEffect(() => {
-      if (earthMatRef.current) {
-        earthMatRef.current.uniforms.uAtmosphereDayColor.value.set(atmosphereDayColor);
-        earthMatRef.current.uniforms.uAtmosphereTwilightColor.value.set(atmosphereTwilightColor);
-      }
-      if (atmMatRef.current) {
-        atmMatRef.current.uniforms.uAtmosphereDayColor.value.set(atmosphereDayColor);
-        atmMatRef.current.uniforms.uAtmosphereTwilightColor.value.set(atmosphereTwilightColor);
-      }
-    }, [atmosphereDayColor, atmosphereTwilightColor]);
 
     return (
-        <group>
-            {/* Earth */}
-            <mesh ref={earthRef}>
+        <group onClick={onClick} name="Earth" userData={{ selectableRoot: true }} ref={earthGroupRef} onPointerOver={() => set(true)} onPointerOut={() => set(false)}>
+            <mesh ref={earthRef} scale={0.3}>
                 <sphereGeometry args={[2, 64, 64]} />
                 <shaderMaterial
                     ref={earthMatRef}
@@ -125,8 +80,7 @@ export default function EarthSystem() {
                 />
             </mesh>
 
-            {/* Atmosphere */}
-            <mesh scale={[1.04, 1.04, 1.04]}>
+            <mesh scale={0.32}>
                 <sphereGeometry args={[2, 64, 64]} />
                 <shaderMaterial
                     ref={atmMatRef}
@@ -136,12 +90,6 @@ export default function EarthSystem() {
                     fragmentShader={atmosphereFragment}
                     uniforms={atmosphereUniforms}
                 />
-            </mesh>
-
-            {/* Debug Sun */}
-            <mesh ref={debugSunRef}>
-                <icosahedronGeometry args={[0.1, 2]} />
-                <meshBasicMaterial />
             </mesh>
         </group>
     );
