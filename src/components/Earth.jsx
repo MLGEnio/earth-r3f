@@ -68,7 +68,7 @@ export default function EarthSystem({ sunRef, earthGroupRef, onClick = () => {} 
     });
 
     return (
-        <group onClick={onClick} name="Earth" userData={{ selectableRoot: true }} ref={earthGroupRef} onPointerOver={() => set(true)} onPointerOut={() => set(false)}>
+        <group onClick={onClick} name="Earth"  ref={earthGroupRef} onPointerOver={() => set(true)} onPointerOut={() => set(false)}>
             <mesh ref={earthRef} scale={0.3}>
                 <sphereGeometry args={[2, 64, 64]} />
                 <shaderMaterial

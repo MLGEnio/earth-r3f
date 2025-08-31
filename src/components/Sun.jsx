@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { useThree, useFrame } from "@react-three/fiber";
-import { useMemo, useRef, useEffect } from "react";
-import { useTexture } from "@react-three/drei";
+import {useMemo, useRef, useEffect, useState} from "react";
+import {useCursor, useTexture} from "@react-three/drei";
 
 import sunVertex from "../shaders/sun/vertex.glsl";
 import sunFragment from "../shaders/sun/fragment.glsl";
@@ -17,6 +17,8 @@ export default function Sun({sunRef}) {
     const sun = useTexture("/sun/8k_sun.jpg")
     sun.colorSpace = THREE.SRGBColorSpace
 
+    const [hovered, set] = useState()
+    useCursor(hovered, /*'pointer', 'auto', document.body*/)
     const sunUniforms = {
         uSunTexture: { value: sun },
         uTime: {value: 0}
@@ -35,7 +37,7 @@ export default function Sun({sunRef}) {
 
 
     return (
-        <group>
+        <group onPointerOver={() => set(true)} onPointerOut={() => set(false)}>
             {/* Earth */}
             <mesh ref={sunRef}>
                 <sphereGeometry args={[2, 64, 64]} />
