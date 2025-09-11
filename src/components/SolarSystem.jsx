@@ -27,7 +27,7 @@ export default function SolarSystem() {
 
     // simple orbit
     useFrame(({ clock }) => {
-        const t = clock.getElapsedTime() * 0.015;
+        const t = clock.getElapsedTime() * 0.00015;
         if (earthGroupRef.current) {
             earthGroupRef.current.position.set(Math.cos(t) * 8, 0, Math.sin(t) * 8);
         }
